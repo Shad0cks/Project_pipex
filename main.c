@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   main.c                                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: pdeshaye <marvin@42.fr>                    +#+  +:+       +#+        */
+/*   By: pdeshaye <pdeshaye@student.42lyon.fr>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/12/10 04:51:11 by pdeshaye          #+#    #+#             */
-/*   Updated: 2021/12/10 04:52:59 by pdeshaye         ###   ########.fr       */
+/*   Updated: 2021/12/11 15:03:16 by pdeshaye         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,18 +18,12 @@ int	get_fd(char *path, int mode)
 	{
 		if (access(path, F_OK))
 		{
-			write(STDERR, "pipex : infile not found !\n", 28);
+			write(STDERR, "Error\ninfile not found !\n", 28);
 			exit(EXIT_FAILURE);
 		}
 		return (open(path, O_RDONLY));
 	}
-	if (access(path, F_OK))
-	{
-		write(STDERR, "pipex : outfile not found !\n", 29);
-		exit(EXIT_FAILURE);
-	}
-	else
-		return (open(path, O_WRONLY));
+	return (open(path, O_CREAT | O_WRONLY | O_TRUNC, 0777));
 }
 
 char	*get_path(char *cmd, char **env)
@@ -69,11 +63,11 @@ void	execmd(char **env, char *cmd)
 	path = get_path(true_cmd, env);
 	free(true_cmd);
 	execve(path, args_cmd, env);
-	perror("somthing went wrong ");
+	perror("Error\n somthing went wrong ");
 	exit(EXIT_FAILURE);
 }
 
-void	pipe_sync(char **env, char *cmd, int fdin)
+pid_t	pipe_sync(char **env, char *cmd, int last)
 {
 	pid_t	pid;
 	int		fd[2];
@@ -84,34 +78,40 @@ void	pipe_sync(char **env, char *cmd, int fdin)
 	if (pid)
 	{
 		close(fd[1]);
-		dup2(fd[0], STDIN);
-		waitpid(pid, NULL, 0);
+		if (!last)
+			dup2(fd[0], STDIN);
+		return (pid);
 	}
-	else
-	{
-		close(fd[0]);
+	close(fd[0]);
+	if (!last)
 		dup2(fd[1], STDOUT);
-		if (fdin == STDIN)
-			exit(-1);
-		execmd(env, cmd);
-	}
+	execmd(env, cmd);
+	return (pid);
 }
 
 int	main(int argc, char *argv[], char *env[])
 {
 	int	fdin;
 	int	fdout;
+	int	pid[2];
 
 	if (argc == 5)
 	{
 		fdin = get_fd(argv[1], 0);
 		fdout = get_fd(argv[4], 1);
+		if (fdin < 0 || fdout < 0)
+		{
+			write(STDERR, "Error\npermision acces !\n", 25);
+			return (-1);
+		}
 		dup2(fdin, STDIN);
 		dup2(fdout, STDOUT);
-		pipe_sync(env, argv[2], fdin);
-		execmd(env, argv[3]);
+		pid[0] = pipe_sync(env, argv[2], 0);
+		pid[1] = pipe_sync(env, argv[3], 1);
+		waitpid(pid[0], 0, 0);
+		waitpid(pid[1], 0, 0);
 	}
 	else
-		write(STDERR, "pipex : invalid number of arguments !\n", 38);
+		write(STDERR, "Error\ninvalid number of arguments !\n", 37);
 	return (0);
 }
